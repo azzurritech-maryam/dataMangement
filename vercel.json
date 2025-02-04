@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "builds": [
+      {
+          "src": "./app.py",
+          "use": "@vercel/python"
+      }
+  ],
+  "routes": [
+      {
+          "src": "/(.*)",
+          "dest": "app.py"
+      }
+  ],
+  "env": {
+      "MONGODB_URI": "mongodb+srv://maryam:ujdv8q5BtRzNmXx5@cluster0.fxcp0.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+      "REDIS_URL": "redis://localhost:6379",
+      "SECRET_KEY": "your-very-secure-random-secret-key",
+      "JWT_SECRET": "your-jwt-secret-key"
+  }
+}
