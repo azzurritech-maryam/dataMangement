@@ -56,6 +56,8 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
+# New environment variable for extended refresh token when "remember me" is enabled.
+REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS", 30))
 
 # Security dependency using HTTPBearer
 security = HTTPBearer()
@@ -132,6 +134,8 @@ class UserSignUp(BaseModel):
 class UserSignIn(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
+    # New field for "remember me" functionality.
+    remember_me: Optional[bool] = False
 
 class UpdatePasswordRequest(BaseModel):
     old_password: str = Field(..., min_length=8)
@@ -212,7 +216,11 @@ async def sign_in(user: UserSignIn):
             detail="Invalid email or password",
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    # Use longer refresh token expiry if remember_me is True.
+    if user.remember_me:
+        refresh_token_expires = timedelta(days=REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS)
+    else:
+        refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     access_token = create_access_token(
         data={"sub": user_record["user_id"]},
         expires_delta=access_token_expires,
