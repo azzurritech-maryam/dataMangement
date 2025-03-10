@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pymongo.mongo_client import MongoClient
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field
 import bcrypt
 import uuid
 import os
@@ -54,9 +54,8 @@ if not SECRET_KEY:
     logger.error("SECRET_KEY environment variable not set")
     raise RuntimeError("SECRET_KEY environment variable not set")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
-# New environment variable for extended refresh token when "remember me" is enabled.
 REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS", 30))
 
 # Security dependency using HTTPBearer
@@ -118,18 +117,7 @@ class UserSignUp(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=8)
-
-    @validator("password")
-    def validate_password(cls, value):
-        if not re.search(r"[A-Z]", value):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", value):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"[0-9]", value):
-            raise ValueError("Password must contain at least one digit")
-        if not re.search(r"[@$!%*?&#]", value):
-            raise ValueError("Password must contain at least one special character")
-        return value
+    # Removed additional password validation
 
 class UserSignIn(BaseModel):
     email: EmailStr
@@ -140,25 +128,17 @@ class UserSignIn(BaseModel):
 class UpdatePasswordRequest(BaseModel):
     old_password: str = Field(..., min_length=8)
     new_password: str = Field(..., min_length=8)
-
-    @validator("new_password")
-    def validate_new_password(cls, value):
-        if not re.search(r"[A-Z]", value):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", value):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"[0-9]", value):
-            raise ValueError("Password must contain at least one digit")
-        if not re.search(r"[@$!%*?&#]", value):
-            raise ValueError("Password must contain at least one special character")
-        return value
+    # Removed additional password validation
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+# Updated SignInResponse model to include token expiration times
 class SignInResponse(TokenResponse):
     refresh_token: str
+    access_token_expires_at: datetime
+    refresh_token_expires_at: datetime
 
 class TokenRefreshRequest(BaseModel):
     refresh_token: str
@@ -205,7 +185,7 @@ async def sign_up(user: UserSignUp):
         )
     return {"message": "User registered successfully"}
 
-# Signin Endpoint (returns both access and refresh tokens)
+# Signin Endpoint (returns both access and refresh tokens along with expiration times)
 @app.post("/signin", response_model=SignInResponse)
 async def sign_in(user: UserSignIn):
     email = normalize_email(user.email)
@@ -216,11 +196,15 @@ async def sign_in(user: UserSignIn):
             detail="Invalid email or password",
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    # Use longer refresh token expiry if remember_me is True.
     if user.remember_me:
         refresh_token_expires = timedelta(days=REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS)
     else:
         refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+    # Calculate expiration datetimes
+    access_token_expires_at = datetime.utcnow() + access_token_expires
+    refresh_token_expires_at = datetime.utcnow() + refresh_token_expires
+
     access_token = create_access_token(
         data={"sub": user_record["user_id"]},
         expires_delta=access_token_expires,
@@ -233,6 +217,8 @@ async def sign_in(user: UserSignIn):
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer",
+        access_token_expires_at=access_token_expires_at,
+        refresh_token_expires_at=refresh_token_expires_at,
     )
 
 # Refresh Token Endpoint
