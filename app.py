@@ -8,7 +8,8 @@ import uuid
 import os
 from dotenv import load_dotenv
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo  # For timezone conversion to Asia/Karachi
 from jose import jwt, JWTError
 import logging
 from typing import Optional
@@ -54,7 +55,7 @@ if not SECRET_KEY:
     logger.error("SECRET_KEY environment variable not set")
     raise RuntimeError("SECRET_KEY environment variable not set")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS", 30))
 
@@ -63,6 +64,7 @@ security = HTTPBearer()
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
+    # Note: JWT "exp" claim remains in UTC
     expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=15))
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -204,9 +206,9 @@ async def sign_in(user: UserSignIn):
     else:
         refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
-    # Calculate expiration datetimes
-    access_token_expires_at = datetime.utcnow() + access_token_expires
-    refresh_token_expires_at = datetime.utcnow() + refresh_token_expires
+    # Calculate expiration datetimes in Asia/Karachi timezone for accurate local time display
+    access_token_expires_at = datetime.now(ZoneInfo("Asia/Karachi")) + access_token_expires
+    refresh_token_expires_at = datetime.now(ZoneInfo("Asia/Karachi")) + refresh_token_expires
 
     access_token = create_access_token(
         data={"sub": user_record["user_id"]},
@@ -224,7 +226,7 @@ async def sign_in(user: UserSignIn):
         refresh_token_expires_at=refresh_token_expires_at,
     )
 
-# Refresh Token Endpoint (now returns the access token expiration time)
+# Refresh Token Endpoint (now returns the access token expiration time in Asia/Karachi timezone)
 @app.post("/refresh-token", response_model=RefreshTokenResponse)
 async def refresh_access_token(request: TokenRefreshRequest):
     token = request.refresh_token
@@ -249,7 +251,7 @@ async def refresh_access_token(request: TokenRefreshRequest):
             detail="User not found",
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token_expires_at = datetime.utcnow() + access_token_expires
+    access_token_expires_at = datetime.now(ZoneInfo("Asia/Karachi")) + access_token_expires
     new_access_token = create_access_token(
         data={"sub": user_id},
         expires_delta=access_token_expires,
@@ -295,3 +297,4 @@ async def update_password(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
