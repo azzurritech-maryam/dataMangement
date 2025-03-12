@@ -54,7 +54,7 @@ if not SECRET_KEY:
     logger.error("SECRET_KEY environment variable not set")
     raise RuntimeError("SECRET_KEY environment variable not set")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS", 30))
 
@@ -117,28 +117,31 @@ class UserSignUp(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=8)
-    # Removed additional password validation
 
 class UserSignIn(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
-    # New field for "remember me" functionality.
     remember_me: Optional[bool] = False
 
 class UpdatePasswordRequest(BaseModel):
     old_password: str = Field(..., min_length=8)
     new_password: str = Field(..., min_length=8)
-    # Removed additional password validation
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
-# Updated SignInResponse model to include token expiration times
+# SignInResponse now includes expiration times
 class SignInResponse(TokenResponse):
     refresh_token: str
     access_token_expires_at: datetime
     refresh_token_expires_at: datetime
+
+# New model for refresh token response that includes access token expiration time
+class RefreshTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    access_token_expires_at: datetime
 
 class TokenRefreshRequest(BaseModel):
     refresh_token: str
@@ -221,8 +224,8 @@ async def sign_in(user: UserSignIn):
         refresh_token_expires_at=refresh_token_expires_at,
     )
 
-# Refresh Token Endpoint
-@app.post("/refresh-token", response_model=TokenResponse)
+# Refresh Token Endpoint (now returns the access token expiration time)
+@app.post("/refresh-token", response_model=RefreshTokenResponse)
 async def refresh_access_token(request: TokenRefreshRequest):
     token = request.refresh_token
     try:
@@ -246,11 +249,16 @@ async def refresh_access_token(request: TokenRefreshRequest):
             detail="User not found",
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires_at = datetime.utcnow() + access_token_expires
     new_access_token = create_access_token(
         data={"sub": user_id},
         expires_delta=access_token_expires,
     )
-    return TokenResponse(access_token=new_access_token, token_type="bearer")
+    return RefreshTokenResponse(
+        access_token=new_access_token,
+        token_type="bearer",
+        access_token_expires_at=access_token_expires_at
+    )
 
 # Update Password Endpoint (requires a valid access token)
 @app.post("/update-password")
