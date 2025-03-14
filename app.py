@@ -55,7 +55,7 @@ if not SECRET_KEY:
     logger.error("SECRET_KEY environment variable not set")
     raise RuntimeError("SECRET_KEY environment variable not set")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REMEMBER_ME_REFRESH_TOKEN_EXPIRE_DAYS", 30))
 
